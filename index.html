@@ -286,6 +286,24 @@ textarea::placeholder{color:var(--text3);}
   opacity:0;transition:all .2s;pointer-events:none;white-space:nowrap;z-index:300;
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+/* ── 今日のトピック ── */
+.today-topic-wrap{padding:12px 20px 14px;border-bottom:1px solid var(--border);}
+.today-topic-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.today-topic-lbl{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.14em;color:var(--text3);text-transform:uppercase;}
+.today-topic-save{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.08em;color:var(--accent);background:none;border:none;cursor:pointer;text-transform:uppercase;padding:2px 0;}
+.today-topic-save:active{opacity:.6;}
+.topic-item{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--border);}
+.topic-item:last-of-type{border-bottom:none;}
+.topic-item-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;background:var(--accent);}
+.topic-item-text{flex:1;font-size:13px;color:var(--text);}
+.topic-item-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:2px 4px;}
+.topic-item-del:active{color:var(--danger);}
+.topic-add-row{display:flex;align-items:center;gap:8px;margin-top:8px;}
+.topic-input{flex:1;background:var(--surface);border:1px solid var(--border);padding:9px 11px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;-webkit-appearance:none;}
+.topic-input:focus{border-color:var(--accent);}
+.topic-add-btn{padding:9px 14px;background:var(--text);color:var(--bg);border:none;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.06em;cursor:pointer;white-space:nowrap;}
+.topic-add-btn:active{opacity:.72;}
+.topic-empty{font-family:'DM Mono',monospace;font-size:10px;color:var(--text3);padding:4px 0;}
 </style>
 </head>
 <body>
@@ -333,6 +351,17 @@ textarea::placeholder{color:var(--text3);}
     <div class="prev-wrap">
       <div class="sec-lbl" style="padding:0;margin-bottom:0;">前回のメモ</div>
       <div class="prev-tags" id="prevTags"></div>
+    </div>
+    <div class="today-topic-wrap" id="todayTopicWrap">
+      <div class="today-topic-header">
+        <span class="today-topic-lbl">今日のトピック</span>
+        <button class="today-topic-save" onclick="saveTodayTopics()">自動保存中</button>
+      </div>
+      <div id="topicList"></div>
+      <div class="topic-add-row">
+        <input class="topic-input" id="topicInput" placeholder="話したいことを追加..." onkeydown="if(event.key==='Enter')addTopic()"/>
+        <button class="topic-add-btn" onclick="addTopic()">＋ 追加</button>
+      </div>
     </div>
     <div class="sec-lbl">Agenda</div>
     <div class="ag-list" id="agList"></div>
@@ -395,7 +424,8 @@ textarea::placeholder{color:var(--text3);}
   <div class="done-wrap" id="tDone" style="display:none;">
     <div class="done-h">Done!</div>
     <div class="done-sub">All agenda completed</div>
-    <div style="height:1px;background:linear-gradient(90deg,#e84040 0%,#e07820 20%,#c8a820 38%,#40a860 55%,#2888cc 75%,#7040c0 100%);margin-bottom:20px;"></div>
+    <div style="height:1px;background:linear-gradient(90deg,#e84040 0%,#e07820 20%,#c8a820 38%,#40a860 55%,#2888cc 75%,#7040c0 100%);margin-bottom:16px;"></div>
+    <div id="doneTodayTopics"></div>
     <div class="memo-lbl">今回のメモ（改行で複数タグに）</div>
     <textarea id="memoTa" placeholder="決定事項、アクションアイテムなど..."></textarea>
     <div class="done-btns">
@@ -432,6 +462,7 @@ let ST=ld();
 if(!ST.ag)ST.ag=JSON.parse(JSON.stringify(DEF));
 if(!ST.hist)ST.hist=[];
 ST.ag.forEach(a=>{if(!a.subs)a.subs=[];});
+if(!ST.topics)ST.topics={};
 let calY=new Date().getFullYear(),calM=new Date().getMonth();
 let selDs=null,curTab=0,tIv=null,tElapsed=0,tRunning=false,tLimit=0,curIdx=0;
 
@@ -511,6 +542,36 @@ function renderUp(){
 }
 function selDate(dStr){selDs=dStr;goTab(1);}
 
+function getTodayTopics(){return selDs&&ST.topics[selDs]?ST.topics[selDs]:[];}
+function saveTodayTopics(){sv();showToast('保存しました');}
+function renderTopics(){
+  if(!selDs){document.getElementById('todayTopicWrap').style.opacity='0.4';return;}
+  document.getElementById('todayTopicWrap').style.opacity='1';
+  const topics=getTodayTopics();
+  const el=document.getElementById('topicList');
+  if(!topics.length){el.innerHTML='<div class="topic-empty">まだ追加されていません</div>';return;}
+  el.innerHTML=topics.map((t,i)=>`
+    <div class="topic-item">
+      <div class="topic-item-dot"></div>
+      <span class="topic-item-text">${t}</span>
+      <button class="topic-item-del" onclick="delTopic(${i})">✕</button>
+    </div>`).join('');
+}
+function addTopic(){
+  if(!selDs){showToast('カレンダーから日付を選択してください');return;}
+  const inp=document.getElementById('topicInput');
+  const val=inp.value.trim();
+  if(!val)return;
+  if(!ST.topics[selDs])ST.topics[selDs]=[];
+  ST.topics[selDs].push(val);
+  inp.value='';
+  sv();renderTopics();
+}
+function delTopic(i){
+  if(!selDs||!ST.topics[selDs])return;
+  ST.topics[selDs].splice(i,1);
+  sv();renderTopics();
+}
 function renderAgenda(){
   document.getElementById('agDateLbl').textContent=selDs?dayLabel(selDs):'— Select a date —';
   const last=ST.hist.length?ST.hist[ST.hist.length-1]:null;
@@ -533,6 +594,7 @@ function renderAgenda(){
       ${subHtml}
     </div>`;
   }).join('');
+  renderTopics();
 }
 
 function openTimer(){
@@ -599,7 +661,18 @@ function toggleSub(si){
   txt.classList.toggle('chk');
 }
 function tNext(){tPause();tElapsed=0;curIdx++;if(curIdx>=ST.ag.length)showDone();else renderTimer();}
-function showDone(){document.getElementById('tBody').style.display='none';document.getElementById('tDone').style.display='flex';document.getElementById('memoTa').value='';}
+function showDone(){
+  document.getElementById('tBody').style.display='none';
+  document.getElementById('tDone').style.display='flex';
+  document.getElementById('memoTa').value='';
+  const topics=getTodayTopics();
+  const el=document.getElementById('doneTodayTopics');
+  if(topics.length){
+    el.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.14em;color:var(--text3);text-transform:uppercase;margin-bottom:8px;">今日のトピック</div>`
+      +topics.map(t=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;color:var(--text2);"><span style="color:var(--accent);">·</span>${t}</div>`).join('')
+      +`<div style="height:1px;background:var(--border);margin:12px 0;"></div>`;
+  } else { el.innerHTML=''; }
+}
 function saveMemo(){ST.hist.push({date:selDs||ds(new Date()),memo:document.getElementById('memoTa').value});if(ST.hist.length>30)ST.hist=ST.hist.slice(-30);sv();renderCal();closeTimer();showToast('保存しました');}
 
 function renderSettings(){
